@@ -40,20 +40,30 @@ model_path = "your/path/to/your/hand_landmarker.task"
 There are multiple settings you need to setup to use mediapipe and do hand landmark detection some of those are 
 
 BaseOptions = mp.tasks.BaseOptions
+
 HandLandmarker = mp.tasks.vision.HandLandmarker
+
 HandLandmarkerOptions = mp.tasks.vision.HandLandmarkerOptions
 
 options = HandLandmarkerOptions(
-    base_options=BaseOptions(model_asset_path=model_path), # You could just put the model path here but i did it like this to keep this part organized
+
+    base_options=BaseOptions(model_asset_path=model_path), # You could just put 
+
+    the model path here but i did it like this to keep this part organized
+    
     running_mode=mp.tasks.vision.RunningMode.IMAGE, # Specifies running in single frame mode
+    
     num_hands=2 #Just specifies the number of hands
+
 )
 
 İf you want more configuration you might like looking at https://developers.google.com/edge/mediapipe/solutions/vision/gesture_recognizer which also has a lot of useful information in general.
 and for opencv we need to setup our window and our video source 
 
-cam = cv.VideoCapture(0) #Setting up the camera you might need to change the value in the parenthesis to use other video sources you have connected for example for me it was 2 because i used Iriun webcam
+cam = cv.VideoCapture(0) #Setting up the camera you might need to change the value in the parenthesis to use other video sources you have connected for example for me it was 2 because I used Iriun webcam
+
 cam.set(3, 1280)#setting width
+
 cam.set(4, 720)#setting height
 
 Now that we are fully set up we can do our landmark detection by using the mp.image to pass our frame to the landmarker model and get the results (we also turn the image to RGB while doing so)

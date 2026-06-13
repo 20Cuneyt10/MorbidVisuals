@@ -15,7 +15,7 @@ options = HandLandmarkerOptions(
     num_hands=2
 )
 
-cam = cv2.VideoCapture(0)#Change accordingly try 1 or 2 if 0 didnt work(or howevermany camera soruces you have)
+cam = cv2.VideoCapture(1)#Change accordingly try 1 or 2 if 0 didnt work(or howevermany camera soruces you have)
 cam.set(3, 1280)#setting width
 cam.set(4, 720)#setting height
 
