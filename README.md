@@ -80,3 +80,41 @@ cam.release()
 cv2.destroyAllWindows()
 
 There we go now we can display our hand landmarks correctly and accurately. In the next project we will use these hand landmarks to draw with our fingers.
+
+Now we can use the information we learned and explore the result function a bit further.
+<h1>Learning fundementals of result and experimenting</h1>
+The setup for our project remains the same until the circle drawing logic. To understand how we can take info of 21 distinct points we have to look at how the results function works.
+We have 2 main uses of our results the first function is result.hand_world_landmarks and the other is result.hand_landmarks The difference beetween these 2 functions are the world landmarks gives distance relative to your hands wrist in metric format while the normal hand landmark function gives you normalized coordinates(1-0) relative to your cameras width and height. 
+
+But why do we need the world hand landmark when we can just use normal hand landmark. 
+
+![alt text](image4.png)
+
+As you can see in the image the distance between the 2 points stays same but the pixels get lesser and lesser so we cant rely on the frame relative hand_landmark function and we must use the hand relative hand_world_landmark to get the distance between the two fingers so we can use them later in the code.
+
+To get one points location we need to call it from the results then assign it to a variable to use it more efficiently
+jointA = result.hand_world_landmarks[0][8] # specifying the exact point of 08 which is index tip
+jointB = result.hand_world_landmarks[0][4] # specifying the exact point of 04 which is thumb tip
+x1,y1,z1 = jointA.x,jointA.y,jointA.z
+x2,y2,z2 = jointB.x,jointB.y,jointB.z
+we can then use these values to check if the finger tips are close together 
+if abs(x1 - x2) <0.015 and abs(y1 - y2) <0.008 :# you might need to mess with these values to make them work better
+    print("Finger tips are close together")
+then we need something else to make our script more fun. What about drawing a line from the thumb tip to index tip everytime we dont detect a pinch and for that we need the frame relative hand_landmark positions we get those by 
+
+jAnormal = result.hand_landmarks[0][8]
+jBnormal = result.hand_landmarks[0][4]
+
+and we get the needed values and assign them to variables with
+
+h,w,_=frame.shape
+bx = int(jBnormal.x*w)
+by = int(jBnormal.y*h)
+cx = int(jAnormal.x*w)
+cy = int(jAnormal.y*h)
+
+and after that we just add a else after our circle drawing logic which just means we will do this everytime we aren't pinching. And also use the cv2.line function to draw a line between 2 points the basic parameters for cv2.line is 
+
+![alt text](image5.png)
+
+Then we can just show the image and add the cleanup code and there you have your line drawing pinch detecting circle drawing code ready at your fingertips.

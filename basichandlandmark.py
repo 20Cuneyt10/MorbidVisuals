@@ -15,7 +15,7 @@ options = HandLandmarkerOptions(
     num_hands=2
 )
 
-cam = cv2.VideoCapture(1) 
+cam = cv2.VideoCapture(2) 
 cam.set(3, 1280)#setting width
 cam.set(4, 720)#setting height
 
@@ -32,10 +32,11 @@ with HandLandmarker.create_from_options(options) as landmarker:
             for hand in result.hand_landmarks:
                 for lm in hand:
                     h, w, _ = frame.shape # Getting the exact values of the frame
-                    # Map normalized coordinates (0.0 - 1.0) to pixels on screen
+                    # Maping normalized coordinates (0.0 - 1.0) to pixels on screen
                     #cx, cy = int(lm.x * 1280), int(lm.y * 720) was using this but it makes y axis a bit funny and it gets worser the further your hand is learned that this could be caused my a number of things but probably its bcus this part is hardcoded and assumes a linear increase in the real life size 
-                    cx, cy = int(lm.x * w), int(lm.y * h)
+                    cx, cy = int(lm.x * w), int(lm.y * h)# Helped with accuracy a lot but why do we use this? It's because mediapipe doesnt give a pixel coordinate for the hands it gives a value between 1-0 1 being one edge and 0 being the other so we multiply these values by our frames size so we can get the exact coordinates to draw on
                     cv2.circle(frame, (cx, cy), 5, (0, 255, 0), cv2.FILLED)
+                    
 
         cv2.imshow("Show Video", cv2.flip(frame, 1))
         if cv2.waitKey(1) & 0xFF == ord('q'): break
