@@ -117,4 +117,4 @@ and after that we just add a else after our circle drawing logic which just mean
 
 ![alt text](image5.png)
 
-Then we can just show the image and add the cleanup code and there you have your line drawing pinch detecting circle drawing code ready at your fingertips.
+Then we can just show the image and add the cleanup code and there you have your line ,drawing pinch detecting, circle drawing code ready at your fingertips which we can now track.
