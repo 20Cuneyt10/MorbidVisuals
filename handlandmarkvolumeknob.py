@@ -54,8 +54,8 @@ with HandLandmarker.create_from_options(options) as landmarker:
                 ring_tip.y > ring_pip.y and
                 (index_tip.y - index_pip.y) > 0.02                
             )
-
-            # Check knuckle sandwich first to prevent overlap error
+            cv2.putText(img=frame, text=f"soundlevel {i}"[::-1], org=(10, 40), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=(0, 255, 0), thickness=2, lineType=cv2.LINE_AA)
+            # Check knuckle sandwich first to prevent it from overlapping
             if knuckle_sandwich:
                 print("you ready for a punch")
                 

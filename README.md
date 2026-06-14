@@ -156,4 +156,66 @@ and after that we just add a else after our circle drawing logic which just mean
 
 ![alt text](image5.png)
 
-Then we can just show the image and add the cleanup code and there you have your line ,drawing pinch detecting, circle drawing code ready at your fingertips which we can now track. this is for my readme.md
+Then we can just show the image and add the cleanup code and there you have your line ,drawing pinch detecting, circle drawing code ready at your fingertips which we can now track. 
+
+Now lets try something else, lets try drawing a line but while also asssigning points in space so the line stays true to those points then we can add a keybind to clear the line to get ready for making a new one.
+
+The basic logic is still the same as the last script we get our variables like the frames height and width and we get the tip of the both fingers as we need them for the pinching detection.
+
+But now we will first need to assign something outside the while loop so we dont reset the values to 0 or True everyime the loop runs. For this experiment we will have 4 different variables that will contain our coordinates for the drawing
+```python
+tx = 0
+ty = 0
+lx = 0
+ly = 0
+```
+And one state for to not set both of the points in the same instance 
+```python
+is_touching = False
+```
+Now lets get into the code. When we detect the pinch for the first time we throw and if statement to see if tx = zero if it is equal to zero we assign the value of bx and by to tx and ty .In doing this we have basically stored that point in 2 variables.
+```python
+if tx == 0: 
+    tx,ty = bx,by
+    is_touching = True
+```
+And we have an elif in the pinching check too which states
+```python
+elif tx != 0 and lx == 0 and is_touching == True :
+    lx,ly = cx,cy
+```
+This just tells that if tx isn't equal to zero(which means it has been assigned) and lx is equal to zero(which means it hasn't been assigned)and is is_touching equal to False which prevents the points lx,ly being the same as tx,ty, set lx,ly equals to cx,cy. This is also why we set the is_touching to True in the assignment of tx,ty so we can turn it to False when we go back to line drawing mode. 
+```python
+elif tx != 0 and lx == 0:
+    cv2.line((frame),pt1=(tx,ty),pt2=(cx,cy),color=(0,255,0),thickness=10)
+    is_touching = True
+``` 
+This is what happens when only the first pinch has  happened (if tx isn't zero it means that it has been assigned but we also have a and which is if lx is equal to zero which means it hasn't been assigned yet)so we draw a line from tx,ty to cx,cy(could have used bx,by too)which just shows us what our line would look like if we put the second point down in cx,cy(which is our index tip).
+
+We also have an else function inside the pinching state
+to draw the line in our newly depicted 2 points which we added so the line doesnt disappear when we pinch 
+```python
+else:
+    cv2.line((frame),pt1=(tx,ty),pt2=(lx,ly),color=(0,255,0),thickness=10)
+ ```
+ And last but notleast we need to add an final line draw logic and cleanup script out of the pinching logic
+ ```python
+                 elif tx != 0 and lx != 0:
+                    cv2.line((frame),pt1=(tx,ty),pt2=(lx,ly),color=(0,255,0),thickness=10)
+                    if cv2.waitKey(1) & 0xFF == ord('c'):
+                        tx = 0
+                        ty = 0
+                        lx = 0
+                        ly = 0
+  
+                else:
+                    cv2.line((frame),pt1=(bx,by),pt2=(cx,cy),color=(0,255,0),thickness=10)
+     
+
+        cv2.imshow("Show Video", cv2.flip(frame, 1))
+        if cv2.waitKey(1) & 0xFF == ord('q'): break
+
+cam.release()
+cv2.destroyAllWindows()
+```
+This is basically a script to draw the new line if tx and lx are both assigned and if we dont mach any if's it just draws the normal line from tip to tip. We also add a keybind to set all 4 values of new points to zero so we can reuse it without closing the script.In our next project we will try to keep the lines we draw and draw polygons using our last point
