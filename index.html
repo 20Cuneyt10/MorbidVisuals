@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MorbidVisuals — Hand Landmarks</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      font-family: 'Courier New', monospace;
+      padding: 16px;
+      zoom: 90%;
+    }
+    .container {
+      position: relative;
+      width: 1280px;
+      max-width: 100%;
+    }
+    .video-wrapper {
+      position: relative;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #000;
+      aspect-ratio: 16 / 9;
+    }
+    video, canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    video { transform: scaleX(-1); }
+    canvas { pointer-events: none; }
+
+    /* ── Controls bar ── */
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      width: 100%;
+      max-width: 1280px;
+    }
+    .controls button {
+      background: #1a1a2e;
+      color: #aaa;
+      border: 1px solid #333;
+      padding: 8px 18px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 13px;
+      transition: all .15s;
+    }
+    .controls button:hover {
+      background: #16213e;
+      color: #ddd;
+    }
+    .controls button.active {
+      background: #4ade80;
+      color: #0a0a0a;
+      border-color: #4ade80;
+      font-weight: bold;
+    }
+    .controls .mode-label {
+      color: #666;
+      font-size: 12px;
+      margin-right: 4px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .controls .hotkey {
+      color: #555;
+      font-size: 10px;
+      margin-left: 4px;
+    }
+
+    #status {
+      text-align: center;
+      color: #666;
+      font-size: 13px;
+      margin-top: 10px;
+      letter-spacing: 0.5px;
+    }
+    #status .ready  { color: #4ade80; }
+    #status .error  { color: #f87171; }
+    #status .info   { color: #94a3b8; }
+    .dot { color: #4ade80; font-weight: bold; }
+
+    .mode-hint {
+      text-align: center;
+      color: #555;
+      font-size: 11px;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="controls">
+    <span class="mode-label">Mode</span>
+    <button data-mode="landmarks" class="active">Landmarks <span class="hotkey">1</span></button>
+    <button data-mode="draw">Pinch Draw <span class="hotkey">2</span></button>
+    <button data-mode="linetool">Line Tool <span class="hotkey">3</span></button>
+    <button data-mode="square">Rotating Square <span class="hotkey">4</span></button>
+  </div>
+
+  <div class="container">
+    <div class="video-wrapper">
+      <video id="video" autoplay playsinline></video>
+      <canvas id="canvas"></canvas>
+    </div>
+    <p id="status"><span class="info">●</span> Loading model…</p>
+    <p id="hint" class="mode-hint">Showing all 21 hand landmarks</p>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/vision_bundle.mjs"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import { HandLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
+
+    // ── DOM refs ──
+    const video  = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx    = canvas.getContext('2d');
+    const status = document.getElementById('status');
+    const hint   = document.getElementById('hint');
+    const modeBtns = document.querySelectorAll('[data-mode]');
+
+    const WASM_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm/';
+
+    // ── Modes ──
+    const MODES = {
+      LANDMARKS: 'landmarks',
+      DRAW:      'draw',
+      LINETOOL:  'linetool',
+      SQUARE:    'square',
+    };
+
+    const MODE_HINTS = {
+      [MODES.LANDMARKS]: 'Showing all 21 hand landmarks',
+      [MODES.DRAW]:      'Pinch thumb & index → green dot · Release → draw line between them',
+      [MODES.LINETOOL]:  'Pinch 1x to place point A · Pinch 2x to place point B and draw line · Press <b>C</b> to clear',
+      [MODES.SQUARE]:    'Pinch and hold → rotating square grows · Release → resets',
+    };
+
+    let currentMode = MODES.LANDMARKS;
+    let handLandmarker = null;
+    let running = true;
+
+    // ── Line Tool state ──
+    let lt = { ax: 0, ay: 0, bx: 0, by: 0, touching: false };
+
+    // ── Square state ──
+    let sq = { i: 10, angle: 0.0 };
+
+    // ── Status helper ──
+    function setStatus(html, cls) {
+      status.innerHTML = `<span class="${cls}">●</span> ${html}`;
+    }
+
+    // ── Mode switching ──
+    function setMode(mode) {
+      currentMode = mode;
+      modeBtns.forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+      hint.innerHTML = MODE_HINTS[mode] || '';
+      // Reset per-mode state
+      lt = { ax: 0, ay: 0, bx: 0, by: 0, touching: false };
+      sq = { i: 10, angle: 0.0 };
+    }
+
+    modeBtns.forEach(btn => {
+      btn.addEventListener('click', () => setMode(btn.dataset.mode));
+    });
+
+    document.addEventListener('keydown', e => {
+      const map = { '1': MODES.LANDMARKS, '2': MODES.DRAW, '3': MODES.LINETOOL, '4': MODES.SQUARE };
+      if (map[e.key]) setMode(map[e.key]);
+      // Global quit
+      if (e.key === 'q' || e.key === 'Q') {
+        running = false;
+        if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
+        handLandmarker?.close();
+        setStatus('Stopped — <span class="info">F5 to restart</span>', 'info');
+      }
+    });
+
+    // ── Init MediaPipe ──
+    async function init() {
+      try {
+        setStatus('Loading WASM…', 'info');
+        const vision = await FilesetResolver.forVisionTasks(WASM_CDN);
+
+        setStatus('Loading model…', 'info');
+        handLandmarker = await HandLandmarker.createFromOptions(vision, {
+          baseOptions: { modelAssetPath: './hand_landmarker.task', delegate: 'GPU' },
+          runningMode: 'VIDEO',
+          numHands: 2,
+        });
+
+        setStatus('Model ready — starting camera…', 'info');
+        await startCamera();
+      } catch (err) {
+        console.error(err);
+        setStatus(`Failed: ${err.message}`, 'error');
+      }
+    }
+
+    // ── Webcam ──
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+        });
+        video.srcObject = stream;
+        await video.play();
+
+        const track = stream.getVideoTracks()[0];
+        const settings = track.getSettings();
+        canvas.width  = settings.width  || 1280;
+        canvas.height = settings.height || 720;
+
+        setStatus('Camera live — hand tracking active <span class="dot">●</span>', 'ready');
+        detectLoop();
+      } catch (err) {
+        setStatus(`Camera access denied: ${err.message}`, 'error');
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  DRAWING HELPERS
+    // ═══════════════════════════════════════════════════
+
+    /** Mirrored point from normalized landmark. */
+    function toMirror(lm, w, h) {
+      return { mx: w - (lm.x * w), my: lm.y * h };
+    }
+
+    /** Draw a circle at mirrored coords. */
+    function circleAt(mx, my, radius, color) {
+      ctx.beginPath();
+      ctx.arc(mx, my, radius, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
+
+    /** Draw a line between two mirrored points. */
+    function lineBetween(x1, y1, x2, y2, color, thickness) {
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = thickness || 10;
+      ctx.stroke();
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  MODE RENDERERS
+    // ═══════════════════════════════════════════════════
+
+    /** Mode 1: Show all 21 landmarks as green dots. */
+    function renderLandmarks(result) {
+      if (!result.landmarks) return;
+      for (const hand of result.landmarks) {
+        for (const lm of hand) {
+          const { mx, my } = toMirror(lm, canvas.width, canvas.height);
+          circleAt(mx, my, 6, '#4ade80');
+          circleAt(mx, my, 2, '#ffffff');
+        }
+      }
+    }
+
+    /** Mode 2: Pinch draw — line between thumb tip (4) & index tip (8). */
+    function renderDraw(result) {
+      if (!result.landmarks || !result.landmarks[0]) return;
+
+      const hand = result.landmarks[0];
+      const tip4 = hand[4];  // thumb tip
+      const tip8 = hand[8];  // index tip
+
+      const { mx: mx4, my: my4 } = toMirror(tip4, canvas.width, canvas.height);
+      const { mx: mx8, my: my8 } = toMirror(tip8, canvas.width, canvas.height);
+
+      // World landmark pinch check
+      let pinching = false;
+      if (result.worldLandmarks && result.worldLandmarks[0]) {
+        const wl = result.worldLandmarks[0];
+        const d = { x: Math.abs(wl[8].x - wl[4].x), y: Math.abs(wl[8].y - wl[4].y) };
+        pinching = d.x < 0.015 && d.y < 0.008;
+      }
+
+      if (pinching) {
+        circleAt(mx8, my8, 5, '#4ade80');
+      } else {
+        lineBetween(mx4, my4, mx8, my8, '#4ade80', 10);
+      }
+    }
+
+    /** Mode 3: Line tool — pinch to place two points, draw line, C to clear. */
+    function renderLineTool(result) {
+      if (!result.landmarks || !result.landmarks[0]) return;
+
+      const hand = result.landmarks[0];
+      const tip4 = hand[4];
+      const tip8 = hand[8];
+      const { mx: mx4, my: my4 } = toMirror(tip4, canvas.width, canvas.height);
+      const { mx: mx8, my: my8 } = toMirror(tip8, canvas.width, canvas.height);
+
+      let pinching = false;
+      if (result.worldLandmarks && result.worldLandmarks[0]) {
+        const wl = result.worldLandmarks[0];
+        const d = { x: Math.abs(wl[8].x - wl[4].x), y: Math.abs(wl[8].y - wl[4].y) };
+        pinching = d.x < 0.015 && d.y < 0.008;
+      }
+
+      if (pinching) {
+        if (lt.ax === 0) {
+          lt.ax = mx4; lt.ay = my4;
+          lt.touching = true;
+        } else if (lt.ax !== 0 && lt.bx === 0 && !lt.touching) {
+          lt.bx = mx8; lt.by = my8;
+        } else {
+          // Both points set — draw the line
+          if (lt.ax !== 0 && lt.bx !== 0) {
+            lineBetween(lt.ax, lt.ay, lt.bx, lt.by, '#4ade80', 10);
+          }
+        }
+      } else {
+        // Not pinching
+        if (lt.ax !== 0 && lt.bx === 0) {
+          // Preview: only first point placed, draw live line to current index
+          lineBetween(lt.ax, lt.ay, mx8, my8, '#4ade80', 10);
+          lt.touching = false;
+        } else if (lt.ax !== 0 && lt.bx !== 0) {
+          // Both points set — keep drawing the stored line
+          lineBetween(lt.ax, lt.ay, lt.bx, lt.by, '#4ade80', 10);
+        } else {
+          // Nothing placed — live line between thumb & index
+          lineBetween(mx4, my4, mx8, my8, '#4ade80', 10);
+        }
+      }
+    }
+
+    /** Mode 4: Pinch to spawn a rotating, growing square with inner square. */
+    function renderSquare(result) {
+      if (!result.landmarks || !result.landmarks[0]) return;
+
+      const hand = result.landmarks[0];
+      const tip4 = hand[4];
+      const tip8 = hand[8];
+      const { mx: mx4, my: my4 } = toMirror(tip4, canvas.width, canvas.height);
+      const { mx: mx8, my: my8 } = toMirror(tip8, canvas.width, canvas.height);
+
+      let pinching = false;
+      if (result.worldLandmarks && result.worldLandmarks[0]) {
+        const wl = result.worldLandmarks[0];
+        const d = { x: Math.abs(wl[8].x - wl[4].x), y: Math.abs(wl[8].y - wl[4].y) };
+        pinching = d.x < 0.015 && d.y < 0.008;
+      }
+
+      if (pinching) {
+        sq.i += 1;
+        sq.angle += 0.05;
+
+        const cx = mx8;  // center on index tip (mirrored)
+        const cy = my8;
+        const s = sq.i * 2;
+        const off = 40 + s;
+
+        // Four corners (before rotation)
+        const corners = [
+          { dx:  off, dy:  off },  // TR
+          { dx:  off, dy: -off },  // BR
+          { dx: -off, dy: -off },  // BL
+          { dx: -off, dy:  off },  // TL
+        ];
+
+        // Rotate and draw
+        const pts = corners.map(c => ({
+          x: cx + (c.dx * Math.cos(sq.angle) - c.dy * Math.sin(sq.angle)),
+          y: cy + (c.dx * Math.sin(sq.angle) + c.dy * Math.cos(sq.angle)),
+        }));
+
+        // Outer square
+        for (let i = 0; i < 4; i++) {
+          const a = pts[i], b = pts[(i + 1) % 4];
+          lineBetween(a.x, a.y, b.x, b.y, '#4ade80', 10);
+        }
+
+        // Midpoints → inner square
+        const mid = pts.map((p, i) => ({
+          x: (p.x + pts[(i + 1) % 4].x) / 2,
+          y: (p.y + pts[(i + 1) % 4].y) / 2,
+        }));
+        for (let i = 0; i < 4; i++) {
+          const a = mid[i], b = mid[(i + 1) % 4];
+          lineBetween(a.x, a.y, b.x, b.y, '#4ade80', 10);
+        }
+      } else {
+        // Not pinching — draw live line, reset square state
+        lineBetween(mx4, my4, mx8, my8, '#4ade80', 10);
+        sq.i = 10;
+        sq.angle = 0.0;
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    //  MAIN LOOP
+    // ═══════════════════════════════════════════════════
+
+    function detectLoop() {
+      if (!running) return;
+
+      const result = handLandmarker.detectForVideo(video, performance.now());
+
+      // Clear + draw mirrored video
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      ctx.restore();
+
+      // Dispatch to current mode
+      switch (currentMode) {
+        case MODES.LANDMARKS: renderLandmarks(result); break;
+        case MODES.DRAW:      renderDraw(result);      break;
+        case MODES.LINETOOL:  renderLineTool(result);  break;
+        case MODES.SQUARE:    renderSquare(result);    break;
+      }
+
+      requestAnimationFrame(detectLoop);
+    }
+
+    // ── C key for line tool clear ──
+    document.addEventListener('keydown', (e) => {
+      if ((e.key === 'c' || e.key === 'C') && currentMode === MODES.LINETOOL) {
+        lt = { ax: 0, ay: 0, bx: 0, by: 0, touching: false };
+      }
+    });
+
+    // ── Boot ──
+    init();
+  </script>
+</body>
+</html>

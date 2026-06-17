@@ -1,0 +1,6 @@
+# Python venv
+mp/
+
+# OS junk
+.DS_Store
+Thumbs.db
