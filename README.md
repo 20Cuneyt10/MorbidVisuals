@@ -82,17 +82,17 @@ Now that we are fully set up we can do our landmark detection by using the mp.im
 
 After that we use the results we get alongside the width and height attributes of our frame and use those values times each other to draw circles on the coordinates that the landmarks are. But before we jump into there I want to talk about what info we get from mediapipe.
 
-![alt text](image.png)
+![handlandmark](image.png)
 
 We get 21 distinct landmarks we can use to make all kinds of applications such as basic gesture recognition ,a dynamic drawing tool or a tool that uses your hand as a volume knob for your pc(all off which we will try to do in this project)
 
 Now lets get back to our own first try of just displaying the hand landmarks.
 
-![alt text](image2.png)
+![hadnlandmarkexp](image2.png)
 
 We get the cx and cy coordinates then draw circles around them with the simple cv2.circle function
 
-![alt text](image3.png)
+![explain cv2.circle](image3.png)
 
 then we can just show our frame, add a stopping and a cleanup logic at the end 
 
@@ -115,7 +115,7 @@ We have 2 main uses of our results the first function is result.hand_world_landm
 
 But why do we need the world hand landmark when we can just use normal hand landmark. 
 
-![alt text](image4.png)
+![explainage](image4.png)
 
 As you can see in the image the distance between the 2 points stays same but the pixels get lesser and lesser so we cant rely on the frame relative hand_landmark function and we must use the hand relative hand_world_landmark to get the distance between the two fingers so we can use them later in the code.
 
@@ -154,7 +154,7 @@ cy = int(jAnormal.y*h)
 
 and after that we just add a else after our circle drawing logic which just means we will do this everytime we aren't pinching. And also use the cv2.line function to draw a line between 2 points the basic parameters for cv2.line is 
 
-![alt text](image5.png)
+![cv2.linexplain](image5.png)
 
 Then we can just show the image and add the cleanup code and there you have your line ,drawing pinch detecting, circle drawing code ready at your fingertips which we can now track. 
 
@@ -218,4 +218,107 @@ else:
 cam.release()
 cv2.destroyAllWindows()
 ```
-This is basically a script to draw the new line if tx and lx are both assigned and if we dont mach any if's it just draws the normal line from tip to tip. We also add a keybind to set all 4 values of new points to zero so we can reuse it without closing the script.In our next project we will try to keep the lines we draw and draw polygons using our last point
+This is basically a script to draw the new line if tx and lx are both assigned and if we dont mach any if's it just draws the normal line from tip to tip. We also add a keybind to set all 4 values of new points to zero so we can reuse it without closing the script.In our next project we will try to keep the lines we draw and draw polygons using our last point.
+
+In the next part of our project we will draw a turning square with another square inside of it. For this project we will use sine and cosine which is just
+
+![sinecosine](image-1.png)
+
+Sourced from mathsisfun.com
+
+You will need to import the math library for this you can do it with 
+```python
+import math
+```
+But how can we calculate the needed points and what does sine and cosine have to do with this.
+
+![square](image6.png)
+
+![squarelogic](image7.png)
+
+In our code which starts the same as our line drawing code until the pinching logic where we get the coordinates of the tip of one of our fingers and use that to calculate the coordinates for not rotating points in space so we can alter them later on 
+```python
+dx_tr, dy_tr = (40 + i * 2), (50 + i * 2)#top right 
+dx_br, dy_br = (40 + i * 2), (-50 - i * 2)#bottom right
+dx_tl, dy_tl = (-40 - i * 2), (50 + i * 2)#top left
+dx_bl, dy_bl = (-40 - i * 2), (-50 - i * 2)#bottom left
+
+```
+We also use a angle(in radians) and a i,angle to set the speed for the turning and the i is for the rate of the size growth. both of these values are constantly getting bigger
+```python
+i = i + 1
+angle = angle + 0.05  #controls the rotation speed in radians
+
+```
+
+The code below is for moving the points accordingly to the sine/cosine value we get by using the angle which gets higher and higher until the pinch goes away  
+```python
+ptr = (
+    int(bx + (dx_tr * math.cos(angle) - dy_tr * math.sin(angle))),
+    int(by + (dx_tr * math.sin(angle) + dy_tr * math.cos(angle)))
+)
+pbr = (
+    int(bx + (dx_br * math.cos(angle) - dy_br * math.sin(angle))),
+    int(by + (dx_br * math.sin(angle) + dy_br * math.cos(angle)))
+)
+ptl = (
+    int(bx + (dx_tl * math.cos(angle) - dy_tl * math.sin(angle))),
+    int(by + (dx_tl * math.sin(angle) + dy_tl * math.cos(angle)))
+)
+pbl = (
+    int(bx + (dx_bl * math.cos(angle) - dy_bl * math.sin(angle))),
+    int(by + (dx_bl * math.sin(angle) + dy_bl * math.cos(angle)))
+    )
+```
+Then we just put the values we get into the cv2.line function to draw the initial square
+```python
+cv2.line(frame, pt1=ptr, pt2=ptl, color=(0, 255, 0), thickness=10)
+cv2.line(frame, pt1=ptr, pt2=pbr, color=(0, 255, 0), thickness=10)
+cv2.line(frame, pt1=pbl, pt2=pbr, color=(0, 255, 0), thickness=10)
+cv2.line(frame, pt1=pbl, pt2=ptl, color=(0, 255, 0), thickness=10)
+```
+if you ran the code with a closing logic and a resetting logic for the i and the angle you would end up with  a rotating and scaling up square. I was going to end the project here but ı remembered a formula for getting the middle point of 2 points and wanted to use it in our code so
+```python
+a = (
+    int((ptr[0] + ptl[0]) / 2),
+    int((ptr[1] + ptl[1]) / 2)
+)  
+
+b = (
+    int((ptr[0] + pbr[0]) / 2),
+    int((ptr[1] + pbr[1]) / 2)
+)  
+
+c = (
+    int((pbl[0] + pbr[0]) / 2),
+    int((pbl[1] + pbr[1]) / 2)
+)  
+
+d = (
+    int((pbl[0] + ptl[0]) / 2),
+    int((pbl[1] + ptl[1]) / 2)
+)  
+```
+
+We just get the sum of the X's and Y's of the corresponding points and divide them into 2 to get the exact point in the middle of the lines.Then we just draw accordingly.
+```python
+cv2.line(frame, pt1=b, pt2=a, color=(0, 255, 0), thickness=10)
+cv2.line(frame, pt1=b, pt2=c, color=(0, 255, 0), thickness=10)
+cv2.line(frame, pt1=d, pt2=c, color=(0, 255, 0), thickness=10)
+cv2.line(frame, pt1=d, pt2=a, color=(0, 255, 0), thickness=10)
+
+```
+Then you can add a cleanup logic to reset the angle and the i value then go back to drawing a line between the 2 tips of the fingers.
+You can play with what points used in what line to do some stuff like this too
+![example](image-2.png)
+
+This concludes our project Below is a list of what we have learned and what we have done:
+- How to use modern MediaPipe
+- Translating math into screen pixels(converting mediapipes decimal coordinates and using them)
+- The power of .world coordinates and their difference from normal ones
+- Saving and using points in a loop
+- Spinning math:Learned how to use sine and cosine with the math library
+- The Midpoint Theorem
+
+
+I enjoyed making this project a lot(considering the sleep hours it took because of the other projects i had ).It also had its ups and downs I tried to make like 5 other scripts so the ones here are the ones that work. But overall it was a nice experience and i want to continue working on this project a lot because mediapipe has so many other functions.
