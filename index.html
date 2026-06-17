@@ -39,6 +39,33 @@
     video { transform: scaleX(-1); }
     canvas { pointer-events: none; }
 
+    /* On-screen overlay hints */
+    .overlay-hint {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.6);
+      color: #4ade80;
+      padding: 6px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+      z-index: 10;
+      white-space: nowrap;
+    }
+    .overlay-hint.show { opacity: 1; }
+    .overlay-hint kbd {
+      background: #333;
+      padding: 2px 8px;
+      border-radius: 4px;
+      color: #fff;
+      font-family: inherit;
+      font-size: 12px;
+    }
+
     /* ── Controls bar ── */
     .controls {
       display: flex;
@@ -117,6 +144,7 @@
     <div class="video-wrapper">
       <video id="video" autoplay playsinline></video>
       <canvas id="canvas"></canvas>
+      <div id="overlayHint" class="overlay-hint">Press <kbd>C</kbd> to clear</div>
     </div>
     <p id="status"><span class="info">●</span> Loading model…</p>
     <p id="hint" class="mode-hint">Showing all 21 hand landmarks</p>
@@ -139,6 +167,7 @@
     const ctx    = canvas.getContext('2d');
     const status = document.getElementById('status');
     const hint   = document.getElementById('hint');
+    const overlayHint = document.getElementById('overlayHint');
     const modeBtns = document.querySelectorAll('[data-mode]');
 
     const WASM_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm/';
@@ -174,10 +203,15 @@
     }
 
     // ── Mode switching ──
+    function showOverlay(show) {
+      overlayHint.classList.toggle('show', show);
+    }
+
     function setMode(mode) {
       currentMode = mode;
       modeBtns.forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
       hint.innerHTML = MODE_HINTS[mode] || '';
+      showOverlay(false);
       // Reset per-mode state
       lt = { ax: 0, ay: 0, bx: 0, by: 0, touching: false };
       sq = { i: 10, angle: 0.0 };
@@ -258,6 +292,13 @@
       ctx.fill();
     }
 
+    /** Check pinch using world landmark x/y thresholds (fingers side-by-side vs stacked). */
+    function isPinching(worldLm) {
+      if (!worldLm || !worldLm[0]) return false;
+      const t = worldLm[0][4], i = worldLm[0][8];
+      return Math.abs(t.x - i.x) < 0.015 && Math.abs(t.y - i.y) < 0.011;
+    }
+
     /** Draw a line between two mirrored points. */
     function lineBetween(x1, y1, x2, y2, color, thickness) {
       ctx.beginPath();
@@ -295,13 +336,7 @@
       const { mx: mx4, my: my4 } = toMirror(tip4, canvas.width, canvas.height);
       const { mx: mx8, my: my8 } = toMirror(tip8, canvas.width, canvas.height);
 
-      // World landmark pinch check
-      let pinching = false;
-      if (result.worldLandmarks && result.worldLandmarks[0]) {
-        const wl = result.worldLandmarks[0];
-        const d = { x: Math.abs(wl[8].x - wl[4].x), y: Math.abs(wl[8].y - wl[4].y) };
-        pinching = d.x < 0.015 && d.y < 0.008;
-      }
+      const pinching = isPinching(result.worldLandmarks);
 
       if (pinching) {
         circleAt(mx8, my8, 5, '#4ade80');
@@ -312,6 +347,9 @@
 
     /** Mode 3: Line tool — pinch to place two points, draw line, C to clear. */
     function renderLineTool(result) {
+      // Show overlay hint when points are placed
+      showOverlay(currentMode === MODES.LINETOOL && lt.ax !== 0);
+
       if (!result.landmarks || !result.landmarks[0]) return;
 
       const hand = result.landmarks[0];
@@ -320,12 +358,7 @@
       const { mx: mx4, my: my4 } = toMirror(tip4, canvas.width, canvas.height);
       const { mx: mx8, my: my8 } = toMirror(tip8, canvas.width, canvas.height);
 
-      let pinching = false;
-      if (result.worldLandmarks && result.worldLandmarks[0]) {
-        const wl = result.worldLandmarks[0];
-        const d = { x: Math.abs(wl[8].x - wl[4].x), y: Math.abs(wl[8].y - wl[4].y) };
-        pinching = d.x < 0.015 && d.y < 0.008;
-      }
+      const pinching = isPinching(result.worldLandmarks);
 
       if (pinching) {
         if (lt.ax === 0) {
@@ -365,12 +398,7 @@
       const { mx: mx4, my: my4 } = toMirror(tip4, canvas.width, canvas.height);
       const { mx: mx8, my: my8 } = toMirror(tip8, canvas.width, canvas.height);
 
-      let pinching = false;
-      if (result.worldLandmarks && result.worldLandmarks[0]) {
-        const wl = result.worldLandmarks[0];
-        const d = { x: Math.abs(wl[8].x - wl[4].x), y: Math.abs(wl[8].y - wl[4].y) };
-        pinching = d.x < 0.015 && d.y < 0.008;
-      }
+      const pinching = isPinching(result.worldLandmarks);
 
       if (pinching) {
         sq.i += 1;
@@ -450,6 +478,7 @@
     document.addEventListener('keydown', (e) => {
       if ((e.key === 'c' || e.key === 'C') && currentMode === MODES.LINETOOL) {
         lt = { ax: 0, ay: 0, bx: 0, by: 0, touching: false };
+        showOverlay(false);
       }
     });
 
