@@ -1,7 +1,7 @@
 # MorbidVisuals
 
 In this project we will explore Google's Mediapipe and see what we can do with it to alter realtime videos or normal videos in general.
-
+You can access the projects demo in here https://20cuneyt10.github.io/MorbidVisuals/
 First we need to download the Mediapipe library I will be using a venv for this and I suggest you do too.
 
 for creating a venv you can use 
